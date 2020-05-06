@@ -198,24 +198,26 @@ async def on_message(message):
                 return
             for row in records:
                 sober_since = str(row[0])
-            for role_name in roles:
-                role = discord.utils.get(message.guild.roles, name=role_name)
-                for user_role in message.author.roles:
-                    if user_role == role:
-                        await message.author.remove_roles(role)            
-            role = await calculate_role(sober_since)
-            if role != 'None':
-            
-                role_obj = discord.utils.get(message.guild.roles, name=role)
-                await message.author.add_roles(role_obj)
-                await reply_message(message, "Set your role to " + role + ".")
+            try:
+                for role_name in roles:
+                    role = discord.utils.get(message.guild.roles, name=role_name)
+                    for user_role in message.author.roles:
+                        if user_role == role:
+                            await message.author.remove_roles(role)            
+                role = await calculate_role(sober_since)
+                if role != 'None':
                 
-            result = await commit_sql("""UPDATE ServerSettings SET LastCheckin=%s WHERE ServerId=%s AND UserId=%s;""",(formatted_date, str(message.guild.id),str(message.author.id)))
-            if result:
+                    role_obj = discord.utils.get(message.guild.roles, name=role)
+                    await message.author.add_roles(role_obj)
+                    await reply_message(message, "Set your role to " + role + ".")
+                    
+                result = await commit_sql("""UPDATE ServerSettings SET LastCheckin=%s WHERE ServerId=%s AND UserId=%s;""",(formatted_date, str(message.guild.id),str(message.author.id)))
+                if result:
+                    await reply_message(message, "Checked you in as sober for today.")
+                else:
+                    await reply_message("Database error!")
+            except: 
                 await reply_message(message, "Checked you in as sober for today.")
-            else:
-                await reply_message("Database error!")
-                
         elif command == 'relapse':
             records = await select_sql("""SELECT DateStarted FROM ServerSettings WHERE ServerId=%s AND UserId=%s;""",(str(message.guild.id),str(message.author.id)))
             if not records:
@@ -224,17 +226,46 @@ async def on_message(message):
             now = datetime.now()
             formatted_date = now.strftime('%Y-%m-%d')        
             result = await commit_sql("""UPDATE ServerSettings SET LastRelapse=%s WHERE ServerId=%s AND UserId=%s;""",(formatted_date, str(message.guild.id),str(message.author.id)))
-            for role_name in roles:
-                role = discord.utils.get(message.guild.roles, name=role_name)
-                for user_role in message.author.roles:
-                    if user_role == role:
-                        await message.author.remove_roles(role)
-                        
-            if result:
+            try:
+                for role_name in roles:
+                    role = discord.utils.get(message.guild.roles, name=role_name)
+                    for user_role in message.author.roles:
+                        if user_role == role:
+                            await message.author.remove_roles(role)
+                            
+                if result:
+                    await reply_message(message, "Recorded your relapse today.")
+                else:
+                    await reply_message(message, "Database error!")
+            except:
                 await reply_message(message, "Recorded your relapse today.")
+        elif command == 'dayssober':
+            now = datetime.now()
+            
+            records = await select_sql("""SELECT IFNULL(Habit,'No data'), IFNULL(DateStarted,'No data'), IFNULL(LastRelapse,'No data'), IFNULL(LastCheckin,'No data'), IFNULL(SoberSince,'No data') FROM ServerSettings WHERE ServerId=%s AND UserId=%s;""",(str(message.guild.id),str(message.author.id)))
+            if not records:
+                await reply_message(message, "You have no data!")
+                return
+            for row in records:
+                habit = str(row[0])
+                date_started = str(row[1])
+                last_relapse = str(row[2])
+                last_checkin = str(row[3])
+                sober_since = str(row[4])
+            if last_relapse !='No data':
+                date_to_check = last_relapse
+            elif last_checkin != 'No data':
+                date_to_check = last_checkin
+            elif sober_since != 'No data':
+                date_to_check = sober_since
             else:
-                await reply_message("Database error!") 
-                
+                await reply_message(message, "No dates recorded yet! Please set your data using at least the st!sobersince command.")
+                return
+            date_to_check = datetime.strptime(date_to_check, '%Y-%m-%d')
+            delta_time = now - date_to_check
+            days_delta = delta_time.days
+            await reply_message(message, "You have been sober " + str(days_delta) + " days.")
+            
         elif command == 'sobersince':
             records = await select_sql("""SELECT DateStarted FROM ServerSettings WHERE ServerId=%s AND UserId=%s;""",(str(message.guild.id),str(message.author.id)))
             if not records:
@@ -243,26 +274,30 @@ async def on_message(message):
             now = datetime.now()
             formatted_date = now.strftime('%Y-%m-%d')        
             result = await commit_sql("""UPDATE ServerSettings SET SoberSince=%s WHERE ServerId=%s AND UserId=%s;""",(parsed_string, str(message.guild.id),str(message.author.id)))
-            for role_name in roles:
-                role = discord.utils.get(message.guild.roles, name=role_name)
-                for user_role in message.author.roles:
-                    if user_role == role:
-                        await message.author.remove_roles(role)
-            role = await calculate_role(parsed_string)
-            if role != 'None':
-                role_obj = discord.utils.get(message.guild.roles, name=role)
-                await message.author.add_roles(role_obj)
-                await reply_message(message, "Set your role to " + role + ".")            
-            if result:
+            try:
+                for role_name in roles:
+                    role = discord.utils.get(message.guild.roles, name=role_name)
+                    for user_role in message.author.roles:
+                        if user_role == role:
+                            await message.author.remove_roles(role)
+                role = await calculate_role(parsed_string)
+                if role != 'None':
+                    role_obj = discord.utils.get(message.guild.roles, name=role)
+                    await message.author.add_roles(role_obj)
+                    await reply_message(message, "Set your role to " + role + ".")
+                    
+                if result:
+                    await reply_message(message, "Set your sober since date to " + parsed_string + ".")
+                else:
+                    await reply_message("Database error!") 
+            except:
                 await reply_message(message, "Set your sober since date to " + parsed_string + ".")
-            else:
-                await reply_message("Database error!")        
         
         elif command == 'invite':
             await reply_message(message, "Click here to invite SobrietyTracker: " + invite_url)
             
         elif command == 'info' or command == 'help':
-            response = "**Sobriety Tracker Discord Bot**\n\nThis bot will help people on a Discord server track and be accountable for their sobriety. The data will be visible to others on the server when roles are given or commands are used unless it is in a private channel.\n\n*Commands*\n\n`Prefix: st!`\n\n`st!createroles`: Create roles on the server (no color, not grouped separately by default) showing length of sobriety.\n\n`st!deleteroles`: Delete the bot server roles.\n\n`st!trackme`: Create an entry for you.\n\n`st!sethabit <habit>`: Set a habit to track (free text)\n\n`st!sobersince YYYY-MM-DD` Set the last date you did your habit.\n\n`st!checkin`: Check in as not doing your habit today.\n\n`st!relapse`: Admit that you did your habit today and reset your roles.\n\n`st!displaymydata`: Show your data for this server.\n\n`st!untrackme`: Delete your data for this server from the bot.\n\n"
+            response = "**Sobriety Tracker Discord Bot**\n\nThis bot will help people on a Discord server track and be accountable for their sobriety. The data will be visible to others on the server when roles are given or commands are used unless it is in a private channel.\n\n*Commands*\n\n`Prefix: st!`\n\n`st!createroles`: Create roles on the server (no color, not grouped separately by default) showing length of sobriety.\n\n`st!deleteroles`: Delete the bot server roles.\n\n`st!trackme`: Create an entry for you.\n\n`st!sethabit <habit>`: Set a habit to track (free text)\n\n`st!sobersince YYYY-MM-DD` Set the last date you did your habit.\n\n`st!checkin`: Check in as not doing your habit today.\n\n`st!relapse`: Admit that you did your habit today and reset your roles.\n\n`st!displaymydata`: Show your data for this server.\n\n`st!dayssober`: Show how many days since your last relapse, checkin, or sober since date, whichever is most recent.\n\n`st!untrackme`: Delete your data for this server from the bot.\n\n"
             await reply_message(message, response)
         elif command == 'untrackme':
             result = await commit_sql("""DELETE FROM ServerSettings WHERE ServerId=%s AND UserId=%s;""",(str(message.guild.id),str(message.author.id)))
@@ -286,4 +321,4 @@ async def on_message(message):
         else:
             pass
         
-client.run('REDACTED')    
+client.run('')    
